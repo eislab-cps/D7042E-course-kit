@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/eislab-cps/D7042E-course-kit/frame"
+	"github.com/eislab-cps/D7042E-course-kit/gateway/device"
 )
 
 const testKey = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
@@ -174,4 +175,33 @@ func sameKeys(a, b map[string]bool) bool {
 	sort.Strings(x)
 	sort.Strings(y)
 	return strings.Join(x, ",") == strings.Join(y, ",")
+}
+
+// -tamper-every: a tampered frame still parses, fails the HMAC check, and the gateway's
+// device side (gateway/device) drops it while accepting the untampered frames around it.
+func TestTamperedFramesAreDroppedByGateway(t *testing.T) {
+	key, _ := frame.ParseKey(testKey)
+	if got := Tamper("S:42;TEMP:2247;HUM:6130;H:6624d8fa493ef251\n"); got != "S:42;TEMP:2248;HUM:6130;H:6624d8fa493ef251\n" {
+		t.Fatalf("Tamper: %q", got)
+	}
+	if got := Tamper("S:0;BOOT:9;TEMP:-1\n"); got != "S:0;BOOT:9;TEMP:0\n" {
+		t.Fatalf("Tamper skips S/BOOT: %q", got)
+	}
+	in := device.NewIngest(frame.HMACRequired, key)
+	g := NewGenerator(Scenarios["cold-chain"], Config{}, 9)
+	const n, every = 30, 5
+	for i := 0; i < n; i++ {
+		line := frame.Encode(g.Next(), key)
+		if (i+1)%every == 0 {
+			line = Tamper(line)
+			if _, err := frame.Parse(line); err != nil {
+				t.Fatalf("tampered frame no longer parses: %v", err)
+			}
+		}
+		in.Line(strings.TrimSuffix(line, "\n"))
+	}
+	s := in.Stats()
+	if s.HMACFail != n/every || s.Accepted != n-n/every {
+		t.Errorf("stats %+v, want HMACFail %d Accepted %d", s, n/every, n-n/every)
+	}
 }

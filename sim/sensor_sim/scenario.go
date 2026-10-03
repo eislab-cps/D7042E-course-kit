@@ -5,6 +5,8 @@ import (
 	"math"
 	"math/rand"
 	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/eislab-cps/D7042E-course-kit/frame"
 )
@@ -173,4 +175,25 @@ func Lookup(name string) (Scenario, error) {
 		return Scenario{}, fmt.Errorf("unknown scenario %q (have %v)", name, ScenarioNames())
 	}
 	return sc, nil
+}
+
+// Tamper changes the first data value of an encoded frame line by +1 and leaves the rest,
+// including any HMAC tag, untouched. Applied after tagging, it produces a frame whose tag
+// no longer matches: what an attacker on the line would send (R10 option B demo).
+func Tamper(line string) string {
+	body := strings.TrimSuffix(line, "\n")
+	parts := strings.Split(body, ";")
+	for i, p := range parts {
+		k, v, ok := strings.Cut(p, ":")
+		if !ok || k == "S" || k == "BOOT" || k == "H" {
+			continue
+		}
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			continue
+		}
+		parts[i] = k + ":" + strconv.FormatInt(n+1, 10)
+		break
+	}
+	return strings.Join(parts, ";") + "\n"
 }

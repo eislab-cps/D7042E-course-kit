@@ -44,7 +44,16 @@ Internal URLs use the compose service names; the plain ports 8080–8082 are rea
 only inside the compose network.
 
 **profile-ca**: `PORT=8787`, `TLS_PORT=8788`, `CA_KEY_FILE=/data/ca.key`; volume
-`profile-ca-data:/data`. Healthcheck on `/health`.
+`profile-ca-data:/data`. Healthcheck on `/health`. At every start profile-ca re-creates its CA
+certificate from the persisted key (same name, same key), so certificates issued before a
+restart, and a `ca.crt` you saved earlier, stay valid. Its records of issued and revoked
+certificates are kept in memory only: after a restart the PIP (`/pip/attributes/{cn}`)
+answers `404` for every earlier certificate, revoked ones included, so a revocation is
+forgotten. A provider that checks the PIP must treat `404` as not valid (fail closed);
+consumers then obtain new certificates through the three profile-ca steps (onboarding →
+device → system) after a profile-ca restart; `POST /ca/certificates/{cn}/reissue` answers `404`
+then. Treating `404` as "not
+revoked" would accept a revoked certificate again.
 
 **cert-provisioner**: `CA_URL=http://profile-ca:8787`, `CERTS_DIR=/certs`; volume
 `certs:/certs`; starts when profile-ca is healthy; `restart: "no"`.
@@ -92,6 +101,30 @@ who choose broker authentication replace it with a password file and an ACL.
 **influxdb**: `DOCKER_INFLUXDB_INIT_MODE=setup` with user, password, organisation,
 bucket and admin token from `.env`; volume `influxdb-data` so data survives a restart of
 the Arrowhead services.
+
+## Using InfluxDB
+
+The stack creates the organisation, bucket and admin token from `deploy/.env` at its first
+start, so you can use them directly (or create your own in the web UI at
+http://localhost:8086, logging in with `INFLUXDB_USERNAME` / `INFLUXDB_PASSWORD`). From the
+repository root:
+
+```bash
+set -a; . deploy/.env; set +a
+# write one point (line protocol: measurement,tags fields timestamp)
+curl -s -X POST "http://localhost:8086/api/v2/write?org=$INFLUXDB_ORG&bucket=$INFLUXDB_BUCKET&precision=s" \
+  -H "Authorization: Token $INFLUXDB_ADMIN_TOKEN" \
+  --data-binary "readings,quantity=temperature value=4.12 $(date +%s)"
+# read it back with Flux (CSV)
+curl -s -X POST "http://localhost:8086/api/v2/query?org=$INFLUXDB_ORG" \
+  -H "Authorization: Token $INFLUXDB_ADMIN_TOKEN" \
+  -H "Content-Type: application/vnd.flux" -H "Accept: application/csv" \
+  --data-binary "from(bucket: \"$INFLUXDB_BUCKET\") |> range(start: -1h) |> filter(fn: (r) => r._measurement == \"readings\")"
+```
+
+The write answers `204` with no body; the query returns CSV with `_time`, `_value`,
+`_field` and `_measurement` columns. The same HTTP API, or the official Go client, is
+what your collector and analysis service use.
 
 ## Deliberately not set
 

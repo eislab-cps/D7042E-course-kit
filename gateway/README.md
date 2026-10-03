@@ -36,3 +36,6 @@ What the stub already does:
 
 Tests: `go test ./gateway/...` covers source selection, pipe/TCP/serial opening, every
 counter, reconnecting, and that the three Arrowhead steps are still TODO.
+`TestStubStepsStillTODO_ReplaceMe` in `gateway_test.go` checks the stub as handed out, so it
+fails once you implement the steps: replace it with tests for your implementation when you
+do, or CI on your repository turns red.

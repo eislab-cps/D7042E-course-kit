@@ -131,10 +131,10 @@ R10 menu:
 
 | Option | What you build | What you must show refused |
 |---|---|---|
-| A. mTLS on your own providers | Sensor and analysis services serve HTTPS, require a client certificate from profile-ca, register with `HTTP-SECURE-JSON` | A consumer without a certificate fails the handshake |
-| B. HMAC frame integrity | `FRAME_FORMAT.md` section 5 in the producer (Wokwi C or simulator) and the gateway, `FRAME_HMAC=required` | A tampered frame is dropped and logged |
+| A. mTLS on your own providers | Sensor and analysis services serve HTTPS, require a client certificate from profile-ca, register with `HTTP-SECURE-JSON` and policy `CERT_AUTH`; consumers verify the provider by its system name (`api-quick-reference.md`, "Calling a provider over mTLS") | A consumer without a certificate fails the handshake |
+| B. HMAC frame integrity | `FRAME_FORMAT.md` section 5 in the producer (Wokwi C or simulator) and the gateway, `FRAME_HMAC=required`; `sim/sensor_sim -hmac -tamper-every N` produces tampered frames to test with | A tampered frame is dropped and logged |
 | C. MQTT broker authentication | Mosquitto with passwords or profile-ca client certificates, plus a topic ACL | An unauthorized publish on your alert topic is rejected |
-| D. Revocation with enforcement | Your provider checks `GET /pip/attributes/{cn}` on profile-ca per request or per connection; revoke with `DELETE /ca/certificates/{cn}` | The same consumer is served before revocation and refused after. Also show that the revoked certificate still gets 200 from the ServiceRegistry over mTLS (for example a lookup), and explain why |
+| D. Revocation with enforcement | Your provider checks `GET /pip/attributes/{cn}` on profile-ca per request or per connection and treats `404` as not valid (fail closed); revoke with `DELETE /ca/certificates/{cn}`. profile-ca forgets its certificate records and revocations when it restarts, so the PIP then answers `404` for every certificate: after a profile-ca restart, obtain new client certificates through the three profile-ca steps (onboarding → device → system); `POST …/reissue` does not help then (it answers `404`). Phase 3 task 5 triggers this | The same consumer is served before revocation and refused after. Also show that the revoked certificate still gets 200 from the ServiceRegistry over mTLS (for example a lookup), and explain why |
 
 ### Where each requirement is built
 
@@ -171,7 +171,8 @@ Four internal phases pace the work. Weeks and days count from the first lecture.
 2. Run `sim/sensor_sim` for your scenario; check the frames on the pipe or socket against
    `FRAME_FORMAT.md`.
 3. Extend the gateway stub: parse both keys, expose two HTTP endpoints, register the
-   gateway system and both services. Write down the interface contract (fields, units,
+   gateway system (the SDK has no call for this yet: send the raw
+   `system-discovery/register` request from `api-quick-reference.md`) and both services. Write down the interface contract (fields, units,
    format).
 4. Get a certificate and an identity for a consumer system. Write a consumer that discovers each service
    through DynamicOrchestration and reads a live value. Grant a ConsumerAuthorization rule;
@@ -213,7 +214,8 @@ observed; two mitigations demonstrated.
 
 ### Phase 3 — Storage and processing (Week 4)
 
-1. Check InfluxDB (web UI on port 8086); create a bucket and a token.
+1. Check InfluxDB (web UI on port 8086); create a bucket and a token, or use the bucket and
+   admin token from `deploy/.env` (see `deploy/README.md`).
 2. Collector: discovers both sensor services through orchestration, polls every 10 s,
    writes readings to InfluxDB; MQTT alerts go to a separate measurement. Watch data
    accumulate for 10 minutes.
@@ -223,7 +225,10 @@ observed; two mitigations demonstrated.
    combines the raw value and the derived result into one status summary.
 5. Restart the AH5 systems. Record what survived and what did not: InfluxDB data,
    registrations, authorization rules, certificates and the CA key, subscriptions.
-   Re-register what was lost; write down what this means for production.
+   Re-register what was lost; write down what this means for production. profile-ca forgets
+   its certificate records and revocations on restart: if you built R10 option D, obtain new
+   client certificates afterwards through the three profile-ca steps (onboarding → device →
+   system; `POST …/reissue` answers `404` then), see `api-quick-reference.md`, profile-ca section.
 
 **Done when:** data accumulates in InfluxDB across restarts; the analysis service returns
 a derived result; the pipeline sensor → gateway → AH5 → collector → InfluxDB → analysis →

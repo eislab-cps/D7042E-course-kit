@@ -21,6 +21,7 @@ go run ./sim/sensor_sim -scenario energy -count 5 -period 100ms          # print
 | `-excursion-len` | `5` | samples each event lasts |
 | `-seed` | time | random seed, for reproducible runs |
 | `-hmac` | off | append HMAC tags (`FRAME_FORMAT.md` section 5); key from `FRAME_HMAC_KEY` (64 hex digits) |
+| `-tamper-every` | `0` | every Nth frame, change one value after tagging, so the tag no longer matches (test your gateway's `FRAME_HMAC=required`; use with `-hmac`) |
 
 Scenarios (keys and scaling in `FRAME_FORMAT.md` section 3):
 
@@ -36,4 +37,5 @@ each event, so an alert path has something to react to. The first frame carries 
 sequence numbers wrap at 65535.
 
 Tests: `go test ./sim/... ./frame/...` checks every emitted frame of every scenario,
-with and without HMAC, against the shared parser.
+with and without HMAC, against the shared parser, and that the gateway's device side
+drops tampered frames.

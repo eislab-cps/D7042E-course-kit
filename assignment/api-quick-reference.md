@@ -74,11 +74,18 @@ Revocation and its state (plain port):
 | Call | Result |
 |---|---|
 | `DELETE /ca/certificates/{cn}` | `204` revoked; `404` unknown or already revoked |
-| `POST /ca/certificates/{cn}/reissue` | `204` un-revoked; `404` not revoked |
-| `GET /pip/attributes/{cn}` | `{"systemName","certLevel","valid"}`; `valid` is false once revoked or expired |
+| `POST /ca/certificates/{cn}/reissue` | `204` un-revoked; `404` not revoked. It only un-revokes a record profile-ca still holds, so it answers `404` after a profile-ca restart |
+| `GET /pip/attributes/{cn}` | `{"systemName","certLevel","valid"}`; `valid` is false once revoked or expired; after a profile-ca restart `404` for every earlier certificate: fail closed and have consumers obtain new certificates through the three steps above (below; detail in `deploy/README.md`) |
 
 The foundation systems do not consult revocation: a revoked certificate still gets 200
-from the ServiceRegistry over mTLS (a lookup succeeds). Enforcement exists only where a component asks the PIP.
+from the ServiceRegistry over mTLS (a lookup succeeds).
+
+profile-ca keeps its certificate records and revocations in memory: after a profile-ca
+restart, `GET /pip/attributes/{cn}` answers `404` for every certificate, revoked ones
+included. Treat `404` as not valid (fail closed). After a restart, consumers obtain new
+client certificates through the three profile-ca steps (onboarding → device → system);
+`POST …/reissue` does not help then (it answers `404`). Certificates issued before the restart still pass TLS: the CA certificate
+is re-created from the same key. Enforcement exists only where a component asks the PIP.
 
 ## Authentication — `https://authentication:8491` (mTLS)
 
@@ -120,7 +127,7 @@ Lookup needs no token.
 | `POST /serviceregistry/system-discovery/register` | `{"name":"ColdChainGateway","addresses":[{"type":"HOSTNAME","address":"localhost"}],"metadata":{}}` | `201` new, `200` updated |
 | `POST /serviceregistry/service-discovery/register` | see below | `201` new, `200` updated, `400` bad name or policy, `401` no or invalid token, `403` token of another system |
 | `POST /serviceregistry/service-discovery/lookup` | `{"serviceDefinitionNames":["temperatureReading"]}` | `200 {"entries":[...],"count":n}` |
-| `DELETE /serviceregistry/service-discovery/revoke/{instanceId}` | — (no token checked) | `200` removed, `204` not found |
+| `DELETE /serviceregistry/service-discovery/revoke/{instanceId}` | — (no token checked; the id looks like `ColdChainGateway\|temperatureReading\|1`, encode `\|` as `%7C`) | `200` removed, `204` not found |
 
 Service registration:
 
@@ -155,7 +162,9 @@ such as `mosquitto` resolve only inside containers: use them only for consumers 
 in a container (with `extra_hosts: host.docker.internal:host-gateway` on Linux). The flat form
 `"interfaces": ["HTTP-INSECURE-JSON"]` is accepted by the registry but carries no
 properties, so orchestration returns port 0 and an empty `serviceUri`: do not use it.
-Policies: `NONE`, `CERT_AUTH`, and token policies you will not need.
+Policies: `NONE`, `CERT_AUTH`, and token policies you will not need. The SDK's
+`registry.HTTPInterface` sets `NONE`; if your service requires a client certificate, set the
+policy yourself: `iface := registry.HTTPInterface(...); iface.Policy = models.PolicyCertAuth`.
 
 An MQTT alert service (R5) is registered the same way with an MQTT interface from the
 foundation MQTT profile. The same three properties apply; `basePath` carries the topic, so
@@ -175,6 +184,9 @@ the pull result's `serviceUri` is the topic to subscribe to:
 | `DELETE /consumerauthorization/authorization/revoke/{instanceId}` | — (encode `|` as `%7C`) | `200` or `404` |
 | `POST /consumerauthorization/authorization/lookup` | `{"targetNames":["temperatureReading"]}` | `200 {"policies":[...],"count","totalCount"}` |
 | `POST /consumerauthorization/authorization/verify` | `{"consumer","provider","target","targetType"}` | `200` bare `true` or `false` |
+
+There is no update call: to add a consumer to an existing rule (`409` on grant), revoke the
+rule and grant it again with the full consumer list.
 
 `grant`, `revoke`, `lookup` and `verify` check no token: any client with a profile-ca
 certificate can call them. `/mgmt/*` needs a Sysop token.
@@ -203,6 +215,30 @@ curl -s -X POST http://localhost:8083/serviceorchestration/orchestration/pull -d
 No rule for the requester → `200 {"response": []}`. The orchestrator takes
 `requesterSystem` from the body without checking who is calling (no token, no
 certificate), unlike the registry.
+
+### Calling a provider over mTLS
+
+A profile-ca system certificate names only the system (`DNS:<SystemName>`), and providers
+usually register `localhost`. So verify the provider's certificate against
+`provider.systemName` from the pull result, not against the address you connect to:
+
+```bash
+curl --cacert ca.pem --cert monitor.pem --key monitor.key \
+  --resolve ColdChainGateway:9443:127.0.0.1 https://ColdChainGateway:9443/temperature
+```
+
+```go
+r := resp.Response[0]
+client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{
+	Certificates: []tls.Certificate{creds.Certificate}, // your system certificate
+	RootCAs:      creds.Roots,                          // the local cloud CA
+	ServerName:   r.Provider.SystemName,                // e.g. ColdChainGateway
+}}}
+url := fmt.Sprintf("https://%s:%d%s", r.Provider.Address, r.Provider.Port, r.Service.ServiceURI)
+```
+
+Without `ServerName` (or `--resolve`), verification fails with "certificate is valid for
+ColdChainGateway, not localhost".
 
 Push. `/mgmt/*` endpoints need `Authorization: Bearer $SYSOP` (`401` no or invalid token,
 `403` valid but not Sysop); subscribe, unsubscribe and pull need none:
@@ -238,3 +274,7 @@ list — pull after you receive it.
 
 In the pinned stack the profile is a naming convention and a library; the Arrowhead
 systems themselves do not listen on MQTT. Your services use the convention.
+
+The SDK's `events` package brings an MQTT client. The first build that imports it stops with
+"missing go.sum entry"; run the command it prints:
+`go get github.com/eislab-cps/Arrowhead-520-Evol-Go-SDK-Edu/events@v0.1.0`.

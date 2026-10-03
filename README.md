@@ -10,9 +10,10 @@ replacement: the same gateway code reads from a simulator or from a serial port.
 
 **Status:** ready for the course. The kit pins the Arrowhead stack at **v0.1.1**
 (prebuilt images `ghcr.io/ulfbod/<name>:v0.1.1`) and the SDK at **v0.1.0** (`go.mod`).
-It contains the compose stack, a working sensor simulator, a gateway stub that already
-reads and checks device frames, and a Wokwi skeleton. What you build is described in
-`assignment/ASSIGNMENT.md`.
+Stack v0.1.1 is API-identical to v0.1.0; it changes only how the images are built
+(multi-architecture: amd64 and arm64). The kit contains the compose stack, a working
+sensor simulator, a gateway stub that already reads and checks device frames, and a Wokwi
+skeleton. What you build is described in `assignment/ASSIGNMENT.md`.
 
 ## Layout
 

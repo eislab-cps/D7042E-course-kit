@@ -30,6 +30,7 @@ func main() {
 		length    = flag.Int("excursion-len", 5, "samples each event lasts")
 		seed      = flag.Int64("seed", time.Now().UnixNano(), "random seed")
 		useHMAC   = flag.Bool("hmac", false, "append HMAC tags (key from FRAME_HMAC_KEY)")
+		tamper    = flag.Int("tamper-every", 0, "change a value after tagging in every Nth frame, to test HMAC checking (0 = never)")
 	)
 	flag.Parse()
 
@@ -55,10 +56,18 @@ func main() {
 	g := NewGenerator(sc, Config{ExcursionEvery: *every, ExcursionLen: *length}, *seed)
 	log.Printf("scenario %s, primary %s, threshold %v, period %v, hmac %v",
 		sc.Name, sc.Primary, sc.Threshold, *period, key != nil)
+	if *tamper > 0 && key == nil {
+		log.Printf("warning: -tamper-every without -hmac: tampered frames are undetectable")
+	}
 	tick := time.NewTicker(*period)
 	defer tick.Stop()
 	for n := 0; *count == 0 || n < *count; n++ {
-		if err := sink.Write(frame.Encode(g.Next(), key)); err != nil {
+		line := frame.Encode(g.Next(), key)
+		if *tamper > 0 && (n+1)%*tamper == 0 {
+			line = Tamper(line)
+			log.Printf("tampered frame: %s", strings.TrimSpace(line))
+		}
+		if err := sink.Write(line); err != nil {
 			log.Fatal(fmt.Errorf("write: %w", err))
 		}
 		if *count == 0 || n+1 < *count {
