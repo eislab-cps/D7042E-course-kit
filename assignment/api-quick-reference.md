@@ -74,18 +74,18 @@ Revocation and its state (plain port):
 | Call | Result |
 |---|---|
 | `DELETE /ca/certificates/{cn}` | `204` revoked; `404` unknown or already revoked |
-| `POST /ca/certificates/{cn}/reissue` | `204` un-revoked; `404` not revoked. It only un-revokes a record profile-ca still holds, so it answers `404` after a profile-ca restart |
-| `GET /pip/attributes/{cn}` | `{"systemName","certLevel","valid"}`; `valid` is false once revoked or expired; after a profile-ca restart `404` for every earlier certificate: fail closed and have consumers obtain new certificates through the three steps above (below; detail in `deploy/README.md`) |
+| `POST /ca/certificates/{cn}/reissue` | `204` un-revoked; `404` not revoked or unknown. Works by name (below) |
+| `GET /pip/attributes/{cn}` | `{"systemName","certLevel","valid"}`; `valid` is false once revoked or expired; `404` for an unknown name: treat as not valid (fail closed). Answers by name, not by certificate (below) |
 
 The foundation systems do not consult revocation: a revoked certificate still gets 200
 from the ServiceRegistry over mTLS (a lookup succeeds).
 
-profile-ca keeps its certificate records and revocations in memory: after a profile-ca
-restart, `GET /pip/attributes/{cn}` answers `404` for every certificate, revoked ones
-included. Treat `404` as not valid (fail closed). After a restart, consumers obtain new
-client certificates through the three profile-ca steps (onboarding → device → system);
-`POST …/reissue` does not help then (it answers `404`). Certificates issued before the restart still pass TLS: the CA certificate
-is re-created from the same key. Enforcement exists only where a component asks the PIP.
+profile-ca keeps its CA certificate, certificate records and revocations across restarts
+(`down -v` clears them; details in `deploy/README.md`). Revocation is per name, not per
+certificate: the PIP answers by common name, and onboarding, revoke and reissue are all on the
+unauthenticated plain port, so anyone who can reach it can restore a revoked name (onboard it
+again, or reissue), and the original revoked certificate is then accepted again.
+Enforcement exists only where a component asks the PIP.
 
 ## Authentication — `https://authentication:8491` (mTLS)
 

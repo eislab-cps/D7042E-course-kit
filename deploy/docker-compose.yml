@@ -25,7 +25,7 @@ x-healthcheck: &hc
 services:
 
   profile-ca:
-    image: ghcr.io/ulfbod/profile-ca:v0.1.1
+    image: ghcr.io/ulfbod/profile-ca:v0.1.2
     environment:
       PORT: "8787"
       TLS_PORT: "8788"
@@ -40,7 +40,7 @@ services:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8787/health || exit 1"]
 
   cert-provisioner:
-    image: ghcr.io/ulfbod/cert-provisioner:v0.1.1
+    image: ghcr.io/ulfbod/cert-provisioner:v0.1.2
     environment:
       CA_URL: "http://profile-ca:8787"
       CERTS_DIR: "/certs"
@@ -52,7 +52,7 @@ services:
     restart: "no"
 
   serviceregistry:
-    image: ghcr.io/ulfbod/serviceregistry:v0.1.1
+    image: ghcr.io/ulfbod/serviceregistry:v0.1.2
     environment:
       PORT: "8080"
       TLS_PORT: "8490"
@@ -78,7 +78,7 @@ services:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
 
   authentication:
-    image: ghcr.io/ulfbod/authentication:v0.1.1
+    image: ghcr.io/ulfbod/authentication:v0.1.2
     environment:
       PORT: "8081"
       TLS_PORT: "8491"
@@ -101,7 +101,7 @@ services:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8081/health || exit 1"]
 
   consumerauth:
-    image: ghcr.io/ulfbod/consumerauth:v0.1.1
+    image: ghcr.io/ulfbod/consumerauth:v0.1.2
     environment:
       PORT: "8082"
       TLS_PORT: "8492"
@@ -125,7 +125,7 @@ services:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8082/health || exit 1"]
 
   dynamicorch-xacml:
-    image: ghcr.io/ulfbod/dynamicorch-xacml:v0.1.1
+    image: ghcr.io/ulfbod/dynamicorch-xacml:v0.1.2
     environment:
       PORT: "8083"
       AUTH_BACKEND: "consumerauth"

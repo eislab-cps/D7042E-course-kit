@@ -8,10 +8,10 @@ built on the Arrowhead 5.2 core systems from
 Everything runs on a laptop. Real Raspberry Pi hardware is optional and a drop-in
 replacement: the same gateway code reads from a simulator or from a serial port.
 
-**Status:** ready for the course. The kit pins the Arrowhead stack at **v0.1.1**
-(prebuilt images `ghcr.io/ulfbod/<name>:v0.1.1`) and the SDK at **v0.1.0** (`go.mod`).
-Stack v0.1.1 is API-identical to v0.1.0; it changes only how the images are built
-(multi-architecture: amd64 and arm64). The kit contains the compose stack, a working
+**Status:** ready for the course. The kit pins the Arrowhead stack at **v0.1.2**
+(prebuilt images `ghcr.io/ulfbod/<name>:v0.1.2`, amd64 and arm64) and the SDK at **v0.1.0**
+(`go.mod`). The stack APIs are unchanged since v0.1.0; v0.1.2 makes profile-ca keep its CA
+certificate and its certificate records, revocations included, across restarts. The kit contains the compose stack, a working
 sensor simulator, a gateway stub that already reads and checks device frames, and a Wokwi
 skeleton. What you build is described in `assignment/ASSIGNMENT.md`.
 

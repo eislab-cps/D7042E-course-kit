@@ -134,7 +134,7 @@ R10 menu:
 | A. mTLS on your own providers | Sensor and analysis services serve HTTPS, require a client certificate from profile-ca, register with `HTTP-SECURE-JSON` and policy `CERT_AUTH`; consumers verify the provider by its system name (`api-quick-reference.md`, "Calling a provider over mTLS") | A consumer without a certificate fails the handshake |
 | B. HMAC frame integrity | `FRAME_FORMAT.md` section 5 in the producer (Wokwi C or simulator) and the gateway, `FRAME_HMAC=required`; `sim/sensor_sim -hmac -tamper-every N` produces tampered frames to test with | A tampered frame is dropped and logged |
 | C. MQTT broker authentication | Mosquitto with passwords or profile-ca client certificates, plus a topic ACL | An unauthorized publish on your alert topic is rejected |
-| D. Revocation with enforcement | Your provider checks `GET /pip/attributes/{cn}` on profile-ca per request or per connection and treats `404` as not valid (fail closed); revoke with `DELETE /ca/certificates/{cn}`. profile-ca forgets its certificate records and revocations when it restarts, so the PIP then answers `404` for every certificate: after a profile-ca restart, obtain new client certificates through the three profile-ca steps (onboarding → device → system); `POST …/reissue` does not help then (it answers `404`). Phase 3 task 5 triggers this | The same consumer is served before revocation and refused after. Also show that the revoked certificate still gets 200 from the ServiceRegistry over mTLS (for example a lookup), and explain why |
+| D. Revocation with enforcement | Your provider checks `GET /pip/attributes/{cn}` on profile-ca per request or per connection and treats `404` as not valid (fail closed); revoke with `DELETE /ca/certificates/{cn}`. Revocations survive a profile-ca restart. Revocation is per name, not per certificate: anyone who can reach profile-ca's plain port can restore a revoked name (onboard it again, or `POST …/reissue`), and the original revoked certificate is then accepted again | The same consumer is served before revocation and refused after. Also show that the revoked certificate still gets 200 from the ServiceRegistry over mTLS (for example a lookup), and explain why. Also show or explain how the revoked name can be restored |
 
 ### Where each requirement is built
 
@@ -224,11 +224,8 @@ observed; two mitigations demonstrated.
 4. Grant the monitoring consumer access to the analysis service; the final consumer
    combines the raw value and the derived result into one status summary.
 5. Restart the AH5 systems. Record what survived and what did not: InfluxDB data,
-   registrations, authorization rules, certificates and the CA key, subscriptions.
-   Re-register what was lost; write down what this means for production. profile-ca forgets
-   its certificate records and revocations on restart: if you built R10 option D, obtain new
-   client certificates afterwards through the three profile-ca steps (onboarding → device →
-   system; `POST …/reissue` answers `404` then), see `api-quick-reference.md`, profile-ca section.
+   registrations, authorization rules, certificates, revocations and the CA key, subscriptions.
+   Re-register what was lost; write down what this means for production.
 
 **Done when:** data accumulates in InfluxDB across restarts; the analysis service returns
 a derived result; the pipeline sensor → gateway → AH5 → collector → InfluxDB → analysis →

@@ -1,7 +1,7 @@
 # deploy/ — the kit's compose stack
 
 `deploy/docker-compose.yml` implements the design on this page (compose project name
-`d7042e-kit`). The environment variable names were verified against the pinned `v0.1.1`
+`d7042e-kit`). The environment variable names were verified against the pinned `v0.1.2`
 images.
 
 One command starts a small Arrowhead 5.2 local cloud plus the messaging and storage the
@@ -44,16 +44,15 @@ Internal URLs use the compose service names; the plain ports 8080–8082 are rea
 only inside the compose network.
 
 **profile-ca**: `PORT=8787`, `TLS_PORT=8788`, `CA_KEY_FILE=/data/ca.key`; volume
-`profile-ca-data:/data`. Healthcheck on `/health`. At every start profile-ca re-creates its CA
-certificate from the persisted key (same name, same key), so certificates issued before a
-restart, and a `ca.crt` you saved earlier, stay valid. Its records of issued and revoked
-certificates are kept in memory only: after a restart the PIP (`/pip/attributes/{cn}`)
-answers `404` for every earlier certificate, revoked ones included, so a revocation is
-forgotten. A provider that checks the PIP must treat `404` as not valid (fail closed);
-consumers then obtain new certificates through the three profile-ca steps (onboarding →
-device → system) after a profile-ca restart; `POST /ca/certificates/{cn}/reissue` answers `404`
-then. Treating `404` as "not
-revoked" would accept a revoked certificate again.
+`profile-ca-data:/data`. Healthcheck on `/health`. profile-ca keeps its CA key (`ca.key`), CA
+certificate (`ca.crt`) and certificate records with the serial counter (`records.json`) in
+`/data`, so a restart changes nothing: the CA certificate is byte-identical, revocations stay
+in force, and `POST /ca/certificates/{cn}/reissue` still works. `down -v` deletes the volume:
+the next start is a new CA, and every certificate issued before is invalid.
+Upgrading from stack v0.1.1 with an existing volume: the CA key is kept and the CA certificate
+is created once from it, so certificates issued under v0.1.1 still verify, but the PIP has no
+record of them (`404`). If you use the PIP (R10 option D), obtain those certificates again
+once through the three profile-ca steps, or start clean with `down -v`.
 
 **cert-provisioner**: `CA_URL=http://profile-ca:8787`, `CERTS_DIR=/certs`; volume
 `certs:/certs`; starts when profile-ca is healthy; `restart: "no"`.
