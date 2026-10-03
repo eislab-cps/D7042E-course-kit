@@ -1,0 +1,5 @@
+# Wokwi for VS Code: simulate the locally built firmware (see README.md).
+[wokwi]
+version = 1
+firmware = 'build/pico_sensor.uf2'
+elf = 'build/pico_sensor.elf'

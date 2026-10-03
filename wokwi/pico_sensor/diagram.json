@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "author": "D7042E course kit",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "wokwi-pi-pico", "id": "pico", "top": 0, "left": 0, "attrs": {} },
+    { "type": "board-bmp180", "id": "bmp180", "top": -100, "left": 180, "attrs": { "temperature": "4", "pressure": "101325" } },
+    { "type": "wokwi-dht22", "id": "dht22", "top": 60, "left": 200, "attrs": { "temperature": "4", "humidity": "60" } },
+    { "type": "wokwi-resistor", "id": "r1", "top": 190, "left": 140, "rotate": 90, "attrs": { "value": "220" } },
+    { "type": "wokwi-led", "id": "led1", "top": 240, "left": 180, "attrs": { "color": "red" } }
+  ],
+  "connections": [
+    [ "$serialMonitor:RX", "pico:GP0", "", [] ],
+    [ "$serialMonitor:TX", "pico:GP1", "", [] ],
+    [ "bmp180:SDA", "pico:GP4", "green", [] ],
+    [ "bmp180:SCL", "pico:GP5", "blue", [] ],
+    [ "bmp180:3.3V", "pico:3V3", "red", [] ],
+    [ "bmp180:GND", "pico:GND.8", "black", [] ],
+    [ "dht22:SDA", "pico:GP15", "green", [] ],
+    [ "dht22:VCC", "pico:3V3", "red", [] ],
+    [ "dht22:GND", "pico:GND.4", "black", [] ],
+    [ "pico:GP16", "r1:1", "orange", [] ],
+    [ "r1:2", "led1:A", "orange", [] ],
+    [ "led1:C", "pico:GND.5", "black", [] ]
+  ],
+  "dependencies": {}
+}
