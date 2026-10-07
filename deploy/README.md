@@ -1,7 +1,7 @@
 # deploy/ — the kit's compose stack
 
 `deploy/docker-compose.yml` implements the design on this page (compose project name
-`d7042e-kit`). The environment variable names were verified against the pinned `v0.1.2`
+`d7042e-kit`). The environment variable names were verified against the pinned `v0.1.3`
 images.
 
 One command starts a small Arrowhead 5.2 local cloud plus the messaging and storage the
@@ -35,7 +35,7 @@ Rules for the file:
 | `mosquitto` | `eclipse-mosquitto:2` | 1883 | MQTT broker for alert services |
 | `influxdb` | `influxdb:2.7` | 8086 | Time-series storage and web UI |
 
-Not included from Go-Evol: the XACML backend (authz-pdp, AuthzForce, PAP), RabbitMQ and
+Not included from Go-Evol: the policy-engine backend (authz-pdp, an AuthzForce-compatible PDP, PAP), RabbitMQ and
 Kafka enforcement points, the dashboard.
 
 ## Settings per service
@@ -83,7 +83,7 @@ on their internal plain ports.
 
 | Variable | Value | Why |
 |---|---|---|
-| `AUTH_BACKEND` | `consumerauth` | authorization through ConsumerAuthorization `verify`; no XACML backend |
+| `AUTH_BACKEND` | `consumerauth` | authorization through ConsumerAuthorization `verify`; no authz-pdp backend |
 | `CA_URL` | `http://consumerauth:8082` | ConsumerAuthorization base URL (the name is historical, not the certificate authority) |
 | `SR_URL` | `http://serviceregistry:8080` | registry lookups |
 | `ENABLE_AUTH` | `true` | a consumer without a rule gets `200` with an empty `response` |

@@ -8,10 +8,11 @@ built on the Arrowhead 5.2 core systems from
 Everything runs on a laptop. Real Raspberry Pi hardware is optional and a drop-in
 replacement: the same gateway code reads from a simulator or from a serial port.
 
-**Status:** ready for the course. The kit pins the Arrowhead stack at **v0.1.2**
-(prebuilt images `ghcr.io/ulfbod/<name>:v0.1.2`, amd64 and arm64) and the SDK at **v0.1.0**
-(`go.mod`). The stack APIs are unchanged since v0.1.0; v0.1.2 makes profile-ca keep its CA
-certificate and its certificate records, revocations included, across restarts. The kit contains the compose stack, a working
+**Status:** ready for the course. The kit pins the Arrowhead stack at **v0.1.3**
+(prebuilt images `ghcr.io/ulfbod/<name>:v0.1.3`, amd64 and arm64) and the SDK at **v0.1.0**
+(`go.mod`). The stack APIs are unchanged since v0.1.0; v0.1.2 made profile-ca keep its CA
+certificate and its certificate records, revocations included, across restarts, and v0.1.3
+corrects the stack's documentation about its bundled policy decision point. The kit contains the compose stack, a working
 sensor simulator, a gateway stub that already reads and checks device frames, and a Wokwi
 skeleton. What you build is described in `assignment/ASSIGNMENT.md`.
 
@@ -36,6 +37,7 @@ Terminal 1 — start the Arrowhead local cloud, Mosquitto and InfluxDB:
 ```bash
 cp deploy/.env.example deploy/.env        # lab-only values
 docker compose -f deploy/docker-compose.yml up -d --wait
+docker compose -f deploy/docker-compose.yml ps   # long-running services Up (healthy)
 curl -s http://localhost:8787/health      # {"status":"ok","system":"profile-ca"}
 go run ./sim/sensor_sim -scenario cold-chain -out tcp://localhost:7000
 ```

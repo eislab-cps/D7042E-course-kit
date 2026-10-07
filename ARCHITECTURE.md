@@ -44,7 +44,7 @@ The key design decisions are summarized below.
 | ID | Decision | Summary |
 |---|---|---|
 | D1 | Simulated hardware lives in the kit | Changes with the assignment each round; no reuse yet |
-| D2 | Slim compose, not the full Go-Evol stack | Seventeen services incl. Kafka and AuthzForce are too heavy for a distance course |
+| D2 | Slim compose, not the full Go-Evol stack | Seventeen services incl. Kafka, RabbitMQ and an AuthzForce-compatible PDP are too heavy for a distance course |
 | D3 | Blacklist thread dropped | No Blacklist service in Go-Evol |
 | D4 | Certificates by name and profile | profile-ca chain onboarding → device → system; server-generated key; CSR flow later |
 | D5 | TLS-only foundation ports | Client certificate needed from Phase 1; orchestrator and CA bootstrap stay plain HTTP this round |

@@ -94,7 +94,7 @@ Gateway rules, with `last` the last accepted sequence number and
 | Restart | frame carries `BOOT` | accept; reset `last`; log the epoch |
 | First frame seen | no `last` yet | accept any `S`; the gateway may have opened the source mid-stream |
 
-Line-level errors (all counted, none stop the gateway):
+Line-level errors (none stop the gateway; all are counted except unknown keys):
 
 | Error | Gateway action |
 |---|---|
@@ -102,7 +102,7 @@ Line-level errors (all counted, none stop the gateway):
 | Line exceeds 128 bytes without `\n` | discard bytes up to and including the next `\n` |
 | Non-ASCII byte, empty field, bad key or value syntax | drop the frame |
 | Missing or non-first `S` field | drop the frame |
-| Unknown key | ignore that field, keep the rest (forward compatibility) |
+| Unknown key | ignore that field, keep the rest (forward compatibility); collected, not counted |
 | Key repeated in one frame | drop the frame |
 | Source closed or read error | reopen with back-off (1 s doubling to 30 s); treat the next frame as "first frame seen" |
 

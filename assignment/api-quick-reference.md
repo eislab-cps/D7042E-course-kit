@@ -118,8 +118,9 @@ Tokens expire (`expirationTime`); log in again when the registry answers 401.
 ## ServiceRegistry — `https://serviceregistry:8490` (mTLS)
 
 Both register calls need `Authorization: Bearer $TOKEN` from the system named in the body:
-no, invalid or expired token → `401`; another system's token → `403`. The token is
-checked before the body, so a bad name only shows as `400` once the token is right.
+no, invalid or expired token → `401`; another system's token → `403`. The order of checks
+is: the body must be valid JSON (`400` "invalid JSON"), then the token (`401`/`403`), then
+the naming rules (`400`), so a bad name only shows as `400` once the token is right.
 Lookup needs no token.
 
 | Call | Body (essentials) | Result |

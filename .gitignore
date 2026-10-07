@@ -16,3 +16,6 @@ vendor/
 .claude/
 __pycache__/
 *.pyc
+
+# Windows download metadata (alternate-data-stream leftovers)
+*:Zone.Identifier
