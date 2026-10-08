@@ -20,6 +20,10 @@ var Keys = map[string]KeySpec{
 	"PRES": {"PRES", "bar", 100, 0, 40000},
 	"CYC":  {"CYC", "cycles", 1, 0, 2147483647},
 	"BOOT": {"BOOT", "", 1, 1, 65535},
+	// Actuator feedback in the uplink (section 3, section 7).
+	"ACTS": {"ACTS", "", 1, 0, 1},
+	"ACK":  {"ACK", "", 1, 0, 2147483647},
+	"SAFE": {"SAFE", "", 1, 0, 1},
 }
 
 // Checked is the result of applying the key table to a parsed frame.

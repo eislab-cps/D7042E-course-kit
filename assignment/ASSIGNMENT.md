@@ -1,7 +1,8 @@
 # D7042E — Individual assignment
 
 Industrial IoT on Arrowhead Framework 5: design, build, secure and evaluate a small but
-complete system on the course kit. You work on it continuously from Week 1 to Week 5.
+complete system on the course kit. You work on it continuously: four intense half-time
+weeks, then a flexible period of less intensive work, then the examination week.
 Only the final submission (code and documentation) is formally submitted; the oral
 examination assesses the completed system.
 
@@ -15,25 +16,26 @@ shapes), `../FRAME_FORMAT.md` (device frame contract), `../README.md` (starting 
 > Design and implement an industrial IoT system that collects data from at least two
 > simulated sensors, stores it persistently, derives at least one processed result, and
 > provides authorized access to both raw and derived data through the AH5 service mesh.
-> Document the architecture, the security model, and evaluate the system honestly against
-> production requirements.
+> For grades 4 and 5 it also acts on the physical world through an authorized actuator
+> (R8). Document the architecture, the security model, and evaluate the system honestly
+> against production requirements.
 
 Choose a scenario from the list or propose your own. The scenario decides what the
 sensors represent and what processing is meaningful; the architecture follows the same
 pattern in every scenario.
 
-| Scenario | Sensors (frame keys) | Processing | Actuation (optional) |
+| Scenario | Sensors (frame keys) | Processing | Actuation (R8, for grades 4 and 5) |
 |---|---|---|---|
-| Cold chain monitoring | Temperature `TEMP` + humidity `HUM` | Threshold alert, drift trend | Alert relay output |
+| Cold chain monitoring | Temperature `TEMP` + humidity `HUM` | Threshold alert, drift trend | Cooling on/off (simulator `-actuator cooling`) |
 | Building energy management | Power `PWR` + occupancy `OCC` | Moving average, anomaly flag | HVAC command |
 | Air quality station | CO₂ `CO2` + temperature `TEMP` | Combined air quality index | Ventilation trigger |
 | Industrial press monitoring | Pressure `PRES` + cycle count `CYC` | Statistical process control | Safety interlock |
-| Custom (with approval) | Your keys, registered in the proposal | Your choice | Optional |
+| Custom (with approval) | Your keys, registered in the proposal | Your choice | Your choice (simulator `-actuator cooling` or `valve`) |
 
 ### Project topic proposal
 
-Due at the end of Week 1; at most one page (about 400–600 words). Feedback by the end of
-Week 2, Day 1. It is a commitment to a scenario and a check that every mandatory
+Recommended hand-in: at the end of intense week 1; at most one page (about 400–600 words).
+Proposals handed in on time get feedback first, early in intense week 2. It is a commitment to a scenario and a check that every mandatory
 requirement fits it. Cover:
 
 1. **Scenario and industrial context** — one sentence on the setting and the purpose.
@@ -48,8 +50,9 @@ requirement fits it. Cover:
    push subscription), and what a consumer does with it.
 6. **Security focus** — the two components for your STRIDE analysis (one is the
    gateway) and the two R10 mitigations you intend to build.
-7. **Actuation** *(optional)* — command path, what it represents physically, what
-   authorization governs it.
+7. **Actuation** *(if you aim for grade 4 or 5)* — the actuator and what it represents
+   physically, the command path, what authorization governs it, and (grade 5) the two
+   consumers whose intentions conflict.
 
 ---
 
@@ -110,7 +113,8 @@ Facts you will need from day one:
 ## 3. Requirements
 
 Every project addresses all mandatory requirements, in the implementation and in the oral
-examination. R8 is optional.
+examination. R8 is not needed to pass with grade 3: its minimal level is required for
+grade 4 and its coordinated level for grade 5 (section "R8 levels" below).
 
 | ID | Requirement |
 |----|-------------|
@@ -121,9 +125,9 @@ examination. R8 is optional.
 | R5 | At least one event-driven path triggered by a configurable threshold or condition, consumable as a registered AH5 service: either MQTT alerts from a service registered with an MQTT interface (`MQTT-INSECURE-JSON` or `MQTT-SECURE-JSON`, topic under `ah5/<ProviderSystem>/`) and discovered via orchestration, or an AH5 push subscription whose notification makes the consumer pull |
 | R6 | All sensor readings stored persistently in InfluxDB; data survives an AH5 stack restart |
 | R7 | At least one derived result computed from stored data (aggregation, detection, or classification), exposed as a new AH5 service with its own ConsumerAuthorization rule |
-| R8 | *(optional)* At least one actuation path: a consumer sends a command that results in a simulated physical output, authorized through ConsumerAuthorization |
+| R8 | Actuation, required for grade 4 (minimal level) and grade 5 (coordinated level): one simulated actuator offered by your gateway as an AH5 service with its own ConsumerAuthorization rule; commands reach the device as downlink frames (`FRAME_FORMAT.md` section 7) and the device reports the observed state. Details in "R8 levels" below |
 | R9 | STRIDE analysis for at least two components (one is the gateway), each of the six categories assessed as mitigated, partially mitigated, or accepted; it addresses the server-generated private key, the orchestrator's unauthenticated requester, and the unauthenticated ConsumerAuthorization grant/revoke and service revoke |
-| R10 | At least two of the mitigations below implemented, each demonstrated **refusing** something. mTLS to the foundation systems is the baseline and does not count. |
+| R10 | At least two of the mitigations below implemented, each demonstrated **refusing** something. mTLS to the foundation systems is the baseline and does not count. For grade 5, R8 at the coordinated level replaces one of the two: one mitigation is then enough. |
 | R11 | Written evaluation: production readiness gaps; the highest-priority unmitigated security risk and why it was accepted; the component that fails first under 10× sensor load |
 | R12 | The complete system starts from `docker compose up` plus documented commands; all requirements above are demonstrable in the oral examination |
 
@@ -136,6 +140,55 @@ R10 menu:
 | C. MQTT broker authentication | Mosquitto with passwords or profile-ca client certificates, plus a topic ACL | An unauthorized publish on your alert topic is rejected |
 | D. Revocation with enforcement | Your provider checks `GET /pip/attributes/{cn}` on profile-ca per request or per connection and treats `404` as not valid (fail closed); revoke with `DELETE /ca/certificates/{cn}`. Revocations survive a profile-ca restart. Revocation is per name, not per certificate: anyone who can reach profile-ca's plain port can restore a revoked name (onboard it again, or `POST …/reissue`), and the original revoked certificate is then accepted again | The same consumer is served before revocation and refused after. Also show that the revoked certificate still gets 200 from the ServiceRegistry over mTLS (for example a lookup), and explain why. Also show or explain how the revoked name can be restored |
 
+### R8 levels
+
+**Minimal level (required for grade 4).** One actuator, simulated: for example cooling on/off
+for the cold room (`sim/sensor_sim -actuator cooling`) or a valve (`-actuator valve`).
+
+1. Your gateway offers it as its own AH5 service (for example `coolingControl`) with an
+   HTTPS command endpoint and its own ConsumerAuthorization rule. The endpoint requires a
+   profile-ca client certificate and refuses a caller that the rule does not allow (`verify`
+   with the certificate's system name as the consumer), so a consumer that skips
+   orchestration and calls the address directly is refused too
+   (`api-quick-reference.md`, "Actuation").
+2. A command becomes a downlink frame to the device (`FRAME_FORMAT.md` section 7); the
+   device reports the observed state in its uplink (`ACTS`, `ACK`).
+3. Your gateway keeps, and can show, three states for a command: **requested** (what the
+   consumer asked for), **commanded** (what the gateway sent) and **observed** (what the
+   device reports). Show a case where they differ: `-act-fault stuck` makes the
+   simulated actuator ignore commands.
+
+Show live: an authorized consumer's command reaching the device; a consumer without a
+rule refused; the three states, including the stuck case.
+
+**Coordinated level (required for grade 5).** Two consumers with conflicting intentions
+share the actuator, for example a temperature controller (keep the room cold) and an
+energy optimiser (switch cooling off during a price peak), plus an emergency stop. Your
+gateway is the **local actuation controller**:
+
+1. **Ownership with a lease and a fencing token:** a consumer acquires the actuator for a
+   limited time and receives an epoch number; every command carries it, and the controller
+   rejects a command whose epoch is not the current one, so a delayed command from a former
+   owner never executes.
+2. **Priority and preemption:** the emergency stop overrides any owner at once and holds
+   the actuator in its safe state until it is explicitly released.
+3. **Idempotent commands:** every command has an ID; a repeated ID does not act twice.
+4. **A defined safe state** on lease expiry without renewal and on loss of the device link.
+   You choose it and justify it (for cold storage, cooling on is usually safe).
+5. **Documented partition behaviour and safety assumptions:** what the device does when the
+   gateway is gone, what the controller does when the device is gone, which operations stay
+   allowed offline.
+
+Keep **authorization** (ConsumerAuthorization: may this consumer use the actuator service?),
+**arbitration** (your controller: which authorized command runs now?) and **execution** (the
+device and its feedback: did it happen?) apart, in code and in your documentation. None of
+this is in the Arrowhead stack: its policy decision point is stateless and matches grants;
+the arbitration is your own code.
+
+Show live: two consumers contending; a stale-epoch command rejected; the emergency stop
+preempting; a repeated command ID ignored; the safe state after lease expiry and after the
+link is cut, seen in the device's own uplink.
+
 ### Where each requirement is built
 
 | Req | Phase | Kit components involved |
@@ -147,7 +200,7 @@ R10 menu:
 | R5 | 2 | Mosquitto, `gateway/`, ServiceRegistry; or DynamicOrchestration push |
 | R6 | 3 | InfluxDB, your collector |
 | R7 | 3 | InfluxDB, ServiceRegistry, ConsumerAuthorization, your analysis service |
-| R8 | 3 (optional) | `wokwi/pico_sensor` LED, `gateway/` |
+| R8 | 3 (minimal), flexible period (coordinated) | `sim/sensor_sim -actuator`, `FRAME_FORMAT.md` section 7, `gateway/`, ConsumerAuthorization; `wokwi/pico_sensor` LED |
 | R9 | 2, refined in 4 | your architecture; profile-ca, DynamicOrchestration, `gateway/` |
 | R10 | 2 | A: profile-ca + your services; B: `FRAME_FORMAT.md`, `wokwi/`, `sim/`, `gateway/`; C: Mosquitto config in `deploy/`; D: profile-ca PIP + your services |
 | R11 | 4 | documentation |
@@ -157,9 +210,10 @@ R10 menu:
 
 ## 4. Phases
 
-Four internal phases pace the work. Weeks and days count from the first lecture.
+Four internal phases pace the work, in a recommended order: Phase 1 in intense weeks 1–2,
+Phase 2 in intense week 3, Phase 3 in intense week 4, Phase 4 in the flexible period.
 
-### Phase 1 — Identity and core integration (Weeks 1–2)
+### Phase 1 — Identity and core integration (intense weeks 1–2)
 
 1. **Certificates.** Start the stack. Get a system certificate for your gateway through
    profile-ca's three steps, using its PascalCase system name; fetch the CA certificate
@@ -186,7 +240,7 @@ Four internal phases pace the work. Weeks and days count from the first lecture.
 both sensor services are registered over mTLS with the gateway's token; the consumer gets authorized data and is denied without a rule;
 Wokwi produces correct frames.
 
-### Phase 2 — Security and messaging (Week 3)
+### Phase 2 — Security and messaging (intense week 3)
 
 1. STRIDE for the gateway and one more component (the orchestrator is a good choice).
    Cover the server-generated private key (what would a CSR flow change, what would it
@@ -212,7 +266,7 @@ Wokwi produces correct frames.
 discoverable as an AH5 service; a push notification delivered and a failed delivery
 observed; two mitigations demonstrated.
 
-### Phase 3 — Storage and processing (Week 4)
+### Phase 3 — Storage and processing (intense week 4)
 
 1. Check InfluxDB (web UI on port 8086); create a bucket and a token, or use the bucket and
    admin token from `deploy/.env` (see `deploy/README.md`).
@@ -226,14 +280,16 @@ observed; two mitigations demonstrated.
 5. Restart the AH5 systems. Record what survived and what did not: InfluxDB data,
    registrations, authorization rules, certificates, revocations and the CA key, subscriptions.
    Re-register what was lost; write down what this means for production.
+6. For grade 4 and 5: R8 at the minimal level (section "R8 levels").
 
 **Done when:** data accumulates in InfluxDB across restarts; the analysis service returns
 a derived result; the pipeline sensor → gateway → AH5 → collector → InfluxDB → analysis →
 consumer runs end to end.
 
-### Phase 4 — Documentation and evaluation (Week 5, Days 1–3)
+### Phase 4 — Documentation and evaluation (the flexible period)
 
-Produce the documentation in section 5 and submit (section 6).
+For grade 5: R8 at the coordinated level. Produce the documentation in section 5 and submit
+(section 6).
 
 ---
 
@@ -254,35 +310,42 @@ Keep it short: 4–8 pages including diagrams. Tables and diagrams beat prose.
    (what is inside and outside, which links are plain text); the gateway identity problem
    (why the Pico cannot hold its own AH5 identity, what the gateway holds for it, what a
    compromised gateway means); the certificate flow (who generated each private key, how
-   it travelled, what a CSR flow would change); your two R10 mitigations — what each
-   stops, what it does not, and the refusal you demonstrated.
+   it travelled, what a CSR flow would change); your two R10 mitigations (one, if you do R8
+   at the coordinated level) — what each stops, what it does not, and the refusal you
+   demonstrated.
 4. **Evaluation** — one paragraph each:
    - *Production readiness:* what must change for a real plant? Consider persistence on
      restart, what triggers push notifications, revocation enforcement, hardware identity
      for the sensor node, operational monitoring.
    - *Security risk:* your biggest remaining risk, and why you accepted it.
    - *Scalability:* what breaks first at 10× sensor nodes, and what change fixes it.
+5. **Actuation (grades 4 and 5)** — the command path from consumer to device and back, with
+   where authorization is checked; the requested, commanded and observed states. For the
+   coordinated level also: your arbitration design (lease, epoch, priority, idempotency),
+   the safe state and why, partition behaviour, and your safety assumptions.
 
 ---
 
 ## 6. Submission and oral examination
 
-**Submission:** end of Week 5, Day 3. Your private repository created from the kit,
+**Submission:** recommended hand-in a few days before the examination week (submissions on
+time get attention first). Your private repository created from the kit,
 shared with the examiner, containing:
 
 | Artifact | Requirement |
 |---|---|
 | Source code | Starts with `docker compose up` plus documented commands |
 | Architecture diagram (PDF or PNG) | All components and links labelled; readable standalone |
-| Security analysis | STRIDE for two components, trust boundary diagram, certificate flow, two mitigations |
+| Security analysis | STRIDE for two components, trust boundary diagram, certificate flow, two mitigations (one with R8 coordinated) |
 | Evaluation | Production readiness, highest-priority risk, scalability limit |
+| Actuation (grades 4 and 5) | The command path and the three states; for grade 5 the arbitration design, safe state and partition behaviour |
 | `README.md` | Exact steps to start the system and trigger each of R1–R12 |
 
-**Oral examination:** Week 5, Days 4–5; individual, 30 minutes.
+**Oral examination:** in the examination week; individual, 30 minutes.
 
 | Part | Time | Content |
 |---|---|---|
-| Live demo | 12 min | Data flowing through the gateway; an orchestrated request; a consumer blocked, a rule granted, the same consumer succeeding; data in InfluxDB; the derived result; an alert event; both R10 mitigations refusing something |
+| Live demo | 12 min | Data flowing through the gateway; an orchestrated request; a consumer blocked, a rule granted, the same consumer succeeding; data in InfluxDB; the derived result; an alert event; both R10 mitigations refusing something; for grades 4 and 5 the actuation path (R8) |
 | Architecture walkthrough | 8 min | Your diagram, each component's role, and why you chose this protocol, this service boundary, this access rule |
 | Examiner questions | 10 min | Three to four questions probing what you built and what lies next to it |
 

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+
+	"github.com/eislab-cps/D7042E-course-kit/frame"
 )
 
 // Sink receives encoded frame lines.
@@ -58,6 +60,14 @@ type tcpSink struct {
 	ln      net.Listener
 	mu      sync.Mutex
 	clients map[net.Conn]bool
+	onLine  func(string) // downlink handler (FRAME_FORMAT.md section 7); nil: ignore input
+}
+
+// Downlink installs the handler for downlink lines read from connected clients.
+func (s *tcpSink) Downlink(h func(string)) {
+	s.mu.Lock()
+	s.onLine = h
+	s.mu.Unlock()
 }
 
 func listenTCP(addr string) (*tcpSink, error) {
@@ -82,8 +92,12 @@ func (s *tcpSink) accept() {
 		}
 		s.mu.Lock()
 		s.clients[c] = true
+		h := s.onLine
 		s.mu.Unlock()
 		log.Printf("client connected: %s", c.RemoteAddr())
+		if h != nil {
+			go readLines(c, true, h)
+		}
 	}
 }
 
@@ -107,4 +121,52 @@ func (s *tcpSink) Close() error {
 		c.Close()
 	}
 	return s.ln.Close()
+}
+
+// DownlinkSink is a sink that also carries downlink lines (TCP: the same connection).
+type DownlinkSink interface {
+	Downlink(func(string))
+}
+
+// readLines feeds every line of r to h until r ends (section 1 framing).
+func readLines(r io.Reader, atBoundary bool, h func(string)) {
+	lr := frame.NewLineReader(r, atBoundary)
+	for {
+		line, err := lr.Next()
+		if err != nil {
+			return
+		}
+		h(line)
+	}
+}
+
+// OpenDownlink starts reading downlink lines from in ("stdin" or "pipe:<path>") and hands
+// them to h. A pipe is created if needed and reopened whenever its writer goes away.
+func OpenDownlink(in string, h func(string)) error {
+	switch {
+	case in == "stdin":
+		go readLines(os.Stdin, true, h)
+		return nil
+	case strings.HasPrefix(in, "pipe:"):
+		path := strings.TrimPrefix(in, "pipe:")
+		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+			if err := syscall.Mkfifo(path, 0o600); err != nil {
+				return fmt.Errorf("mkfifo %s: %w", path, err)
+			}
+		}
+		go func() {
+			for {
+				f, err := os.Open(path) // blocks until the gateway opens it for writing
+				if err != nil {
+					log.Printf("downlink %s: %v", path, err)
+					return
+				}
+				log.Printf("reading downlink from %s", path)
+				readLines(f, true, h)
+				f.Close()
+			}
+		}()
+		return nil
+	}
+	return fmt.Errorf("-in must be stdin or pipe:<path>, got %q", in)
 }

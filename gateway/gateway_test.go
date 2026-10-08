@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/eislab-cps/Arrowhead-520-Evol-Go-SDK-Edu/transport"
+	"github.com/eislab-cps/D7042E-course-kit/frame"
+	"github.com/eislab-cps/D7042E-course-kit/gateway/device"
 )
 
 // REPLACE THIS TEST when you implement the Arrowhead steps (assignment Phase 1).
@@ -23,5 +25,20 @@ func TestStubStepsStillTODO_ReplaceMe(t *testing.T) {
 	}
 	if err := registerServices(t.Context(), ArrowheadConfig{}, transport.Credentials{}, ""); !errors.Is(err, errTODO) {
 		t.Errorf("register: %v", err)
+	}
+}
+
+// REPLACE THIS TEST when you implement R8 (grades 4 and 5); it is fine as it is for grade 3.
+// It checks that the actuator side is still TODO as handed out.
+func TestActuatorStillTODO_ReplaceMe(t *testing.T) {
+	dl := &Downlink{Link: &device.Link{}}
+	if err := dl.Command(1, 1); !errors.Is(err, errTODO) {
+		t.Errorf("Command: %v", err)
+	}
+	if err := dl.KeepAlive(); !errors.Is(err, errTODO) {
+		t.Errorf("KeepAlive: %v", err)
+	}
+	if err := serveActuator(t.Context(), ":0", device.NewIngest(frame.HMACOff, nil), dl); !errors.Is(err, errTODO) {
+		t.Errorf("serveActuator: %v", err)
 	}
 }

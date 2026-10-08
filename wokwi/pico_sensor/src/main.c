@@ -3,12 +3,13 @@
 // Hardware (same in Wokwi and on the optional real kit, see diagram.json):
 //   BMP180  I2C0  SDA=GP4 SCL=GP5  address 0x77  -> TEMP, BARO
 //   DHT22   single-wire data on GP15             -> HUM
-//   LED     GP16 through 220 ohm                 -> optional actuation (R8)
-//   UART0   TX=GP0 RX=GP1  115200 8N1            -> frames to the gateway
+//   LED     GP16 through 220 ohm                 -> the actuator (R8): on = cooling on
+//   UART0   TX=GP0 RX=GP1  115200 8N1            -> frames to the gateway; RX: downlink (R8)
 //
 // Output contract: FRAME_FORMAT.md (one line per sample, "S:<seq>;KEY:VALUE...\n",
 // integers = physical value x scale). This skeleton only initialises the peripherals
-// and sends the restart frame. Everything marked TODO is your part of the assignment.
+// and sends the restart frame. Everything marked TODO is your part of the assignment;
+// the TODOs marked R8 only for grades 4 and 5.
 
 #include <stdio.h>
 #include "pico/stdlib.h"
@@ -33,6 +34,11 @@
 
 #define SAMPLE_PERIOD_MS 2000   // FRAME_FORMAT.md section 2: Wokwi default 2 s
 
+// R8: FRAME_FORMAT.md section 7. The device starts in its safe state (cooling on) and
+// returns to it on SAFE:1 or when no valid downlink frame arrives for LINK_TIMEOUT_MS.
+#define ACT_SAFE_VALUE   1
+#define LINK_TIMEOUT_MS  10000
+
 static void uart_setup(void) {
     uart_init(UART_ID, UART_BAUD);
     gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
@@ -54,7 +60,29 @@ static void gpio_setup(void) {
     gpio_pull_up(DHT22_PIN);
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
-    gpio_put(LED_PIN, 0);
+    gpio_put(LED_PIN, ACT_SAFE_VALUE);   // start in the safe state (R8)
+}
+
+static uint32_t ms_now(void) { return to_ms_since_boot(get_absolute_time()); }
+
+// R8: the downlink, read from UART0 RX without blocking (call it often; it returns at
+// once when nothing has arrived). In the browser, type a frame such as
+// "C:0;CID:1;ACT:0" into the serial monitor and press Enter.
+//
+// TODO (R8): collect characters with uart_is_readable(UART_ID) / uart_getc(UART_ID)
+//       into a line buffer until LF (ignore CR; drop a line longer than 128 bytes).
+// TODO (R8): for each complete line, apply FRAME_FORMAT.md section 7 and drop the whole
+//       frame on any error: "C:<seq>" first, sequence rules as section 4 (BOOT resets);
+//       exactly one of CID+ACT, CID+SAFE:1 or KA:1; ACT 0..1; with HMAC, the tag
+//       (prefix "C:", same key as the uplink).
+// TODO (R8): remember the last 8 CIDs and apply each CID once; set the LED for ACT,
+//       go to ACT_SAFE_VALUE for SAFE:1; any valid frame (KA too) refreshes the link timer.
+static void downlink_poll(void) {
+}
+
+// TODO (R8): if ms_now() - <time of the last valid downlink frame> > LINK_TIMEOUT_MS,
+//       put the LED in ACT_SAFE_VALUE and report SAFE:1 until the next command.
+static void link_timeout_check(void) {
 }
 
 // Boot epoch for the BOOT field (FRAME_FORMAT.md section 4): 16 random bits from the
@@ -84,8 +112,16 @@ int main(void) {
 
     // TODO: read the BMP180 calibration registers (0xAA..0xBF) once.
 
+    uint32_t next_sample = ms_now() + SAMPLE_PERIOD_MS;
     while (true) {
-        sleep_ms(SAMPLE_PERIOD_MS);
+        // Poll the downlink between samples instead of sleeping for the whole period.
+        downlink_poll();
+        link_timeout_check();
+        if ((int32_t)(ms_now() - next_sample) < 0) {
+            sleep_ms(1);
+            continue;
+        }
+        next_sample += SAMPLE_PERIOD_MS;
 
         // TODO: BMP180 — start a temperature and a pressure conversion over I2C,
         //       read the raw values and apply the datasheet compensation formula.
@@ -94,6 +130,7 @@ int main(void) {
         //       timing the pulses, check the checksum. HUM = %RH x 100.
         // TODO: build "S:<seq>;TEMP:<t>;HUM:<h>;BARO:<p>\n" into line, write it with
         //       uart_puts(UART_ID, line) and increment seq (it wraps at 65535).
+        // TODO (R8): append ";ACTS:<led>;ACK:<last accepted CID>;SAFE:<0|1>" before the tag.
         // TODO (R10 option B): append ";H:<tag>" per FRAME_FORMAT.md section 5.
         (void)seq;
     }

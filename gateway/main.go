@@ -2,6 +2,7 @@
 // from SERIAL_SOURCE through the shared FRAME_FORMAT implementation and keeps the latest
 // reading per key. The Arrowhead steps (certificate, identity, registration) and the
 // HTTP service endpoints are yours to implement; see arrowhead.go and the TODOs below.
+// For R8 (grades 4 and 5), actuator.go holds the actuator side.
 //
 //	SERIAL_SOURCE=tcp://localhost:7000 go run ./gateway
 package main
@@ -57,8 +58,9 @@ func main() {
 	}
 
 	in := device.NewIngest(mode, key)
+	link := &device.Link{} // the write side of the same device connection (R8)
 	stop := make(chan struct{})
-	go device.Run(src, in, stop)
+	go device.RunLink(src, in, link, stop)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	if err := arrowheadStartup(ctx, cfg); err != nil {
@@ -69,6 +71,10 @@ func main() {
 	// TODO: start an HTTP(S) server on cfg.AdvertPort with one endpoint per sensor
 	// quantity, e.g. GET /temperature returning in.Latest("TEMP") as JSON with the
 	// field names and units of your interface contract.
+
+	// TODO (R8): dl := &Downlink{Link: link, Key: key, Boot: <1..65535, new per start>};
+	// start the keep-alive goroutine (dl.KeepAlive at least every 10s/3) and
+	// serveActuator(ctx, ":9444", in, dl). See actuator.go.
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)

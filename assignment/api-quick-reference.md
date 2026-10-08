@@ -265,6 +265,79 @@ The orchestrator POSTs `{"subscriptionId","ownerSystemName","targetSystemName"}`
 over plain HTTP; any 2xx counts as delivered. The notification contains no provider
 list — pull after you receive it.
 
+## Actuation (R8)
+
+The actuator service is your own HTTPS server in the gateway, like the R1 services: the SDK
+has no provider side. The shapes below are a recommendation; any equivalent works, and
+your README states yours.
+
+Register it with its own interface and the `CERT_AUTH` policy, and give it its own rule:
+
+```go
+iface := registry.HTTPInterface("HTTP-SECURE-JSON", "localhost", 9444, "/cooling")
+iface.Policy = models.PolicyCertAuth
+// register "coolingControl" with iface, as for the sensor services (gateway's token)
+grant := auth.AllowConsumers("ColdChainGateway", "coolingControl", "TempController", "EnergyOptimiser")
+```
+
+The endpoint requires a profile-ca client certificate. Because a consumer could skip
+orchestration and call the address directly, it asks ConsumerAuthorization itself, with the
+caller's certificate name (`r.TLS.PeerCertificates[0].Subject.CommonName`) as the consumer.
+The SDK's auth client has no verify call, so use `transport.Client.Do`:
+
+```go
+resp, err := ca.Do(ctx, transport.Request{Method: "POST",
+	Path: "/consumerauthorization/authorization/verify",
+	Body: map[string]string{"consumer": caller, "provider": "ColdChainGateway",
+		"target": "coolingControl", "targetType": "SERVICE_DEF"}})
+// resp.Body is a bare true or false
+```
+
+A command (minimal level; `epoch` only at the coordinated level). The consumer sends it
+with `transport.Client.Do` over mTLS, `ServerName` set to the provider's system name:
+
+```
+POST /cooling/command   {"cid": 907, "act": 1}            -> 202
+                        {"cid": 907, "requested": 1, "commanded": 1, "observed": 0}
+GET  /cooling/state                                       -> 200
+                        {"requested": 1, "commanded": 1, "observed": 1, "ack": 907, "safe": false}
+```
+
+`observed` comes from the device's `ACTS`; it lags behind `commanded`, and with
+`sim/sensor_sim -act-fault stuck` it never follows.
+
+Coordinated level (grade 5), one possible shape:
+
+| Call | Body | Result |
+|---|---|---|
+| `POST /cooling/lease` | `{"ttlSeconds": 15}` | `200 {"epoch": 4, "ttlSeconds": 15}`; `409` held by another consumer |
+| `POST /cooling/lease/renew` | `{"epoch": 4}` | `200`; `409` not the current epoch |
+| `DELETE /cooling/lease?epoch=4` | — | `200`; `409` not the current epoch |
+| `POST /cooling/command` | `{"cid": 908, "epoch": 4, "act": 0}` | `202`; `409` stale epoch or not the owner |
+| `POST /cooling/estop` | `{"cid": 909}` | `200`; the device gets `SAFE:1` |
+| `POST /cooling/estop/release` | `{}` | `200`; commands are possible again for a new lease |
+
+Refusals, in the order they are checked:
+
+| Situation | Answer |
+|---|---|
+| No client certificate | the TLS handshake fails; no HTTP status |
+| ConsumerAuthorization `verify` says `false` | `403` |
+| ConsumerAuthorization cannot be reached | `503` "authorization unavailable": fail closed; the e-stop alone may fail safe and be accepted (your design decision; state it in your README) |
+| Body not valid JSON, `act` out of range, `cid` missing | `400` |
+| Emergency stop active | `423` |
+| Not the lease holder, or a stale `epoch` (coordinated level) | `409` |
+| A `cid` already handled | `200` with the first result; nothing is sent to the device again |
+| Device link down (no uplink for `LINK_TIMEOUT`) | `503`; the command is not sent |
+
+On the other calls: an e-stop release by a consumer that may not release it gets `403`; a lease
+call at the minimal level, if your service offers the path at all, gets `400` (leases belong to
+the coordinated level).
+
+The device side: downlink frames in `../FRAME_FORMAT.md` section 7. Start the simulator
+with an actuator: `go run ./sim/sensor_sim -actuator cooling -out tcp://localhost:7000` (the gateway
+writes downlink frames into the same connection).
+
 ## MQTT profile (foundation `SPEC.md` section 11)
 
 | Item | Value |

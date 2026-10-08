@@ -116,7 +116,11 @@ func (in *Ingest) SourceClosed(discarded int) {
 
 // Run reads from src until stop is closed, reopening with back-off (1 s doubling to
 // 30 s) whenever the source closes or fails (FRAME_FORMAT.md section 4).
-func Run(src Source, in *Ingest, stop <-chan struct{}) {
+func Run(src Source, in *Ingest, stop <-chan struct{}) { RunLink(src, in, nil, stop) }
+
+// RunLink is Run that also attaches link to the open source, so downlink frames can be
+// written (FRAME_FORMAT.md section 7). link may be nil.
+func RunLink(src Source, in *Ingest, link *Link, stop <-chan struct{}) {
 	backoff := time.Second
 	for {
 		select {
@@ -130,6 +134,9 @@ func Run(src Source, in *Ingest, stop <-chan struct{}) {
 		} else {
 			log.Printf("reading frames from %s", src)
 			backoff = time.Second
+			if link != nil {
+				link.attach(src, rc)
+			}
 			lr := frame.NewLineReader(rc, atBoundary)
 			for {
 				line, err := lr.Next()
@@ -140,6 +147,9 @@ func Run(src Source, in *Ingest, stop <-chan struct{}) {
 					break
 				}
 				in.Line(line)
+			}
+			if link != nil {
+				link.detach()
 			}
 			rc.Close()
 			in.SourceClosed(lr.Discarded)

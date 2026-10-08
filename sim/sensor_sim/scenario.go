@@ -104,6 +104,8 @@ type Generator struct {
 	drift  []float64
 	state  []float64 // binary state or counter value
 	boot   int32
+	// Offset, when set, is added to a channel's physical value (the actuator's effect).
+	Offset func(key string) float64
 }
 
 // NewGenerator seeds a generator. The first frame carries BOOT with a random epoch.
@@ -152,6 +154,9 @@ func (g *Generator) Next() frame.Frame {
 			v := ch.Base + g.drift[i] + g.rng.NormFloat64()*ch.Noise
 			if exc {
 				v += ch.Excursion
+			}
+			if g.Offset != nil {
+				v += g.Offset(ch.Key)
 			}
 			raw = int64(math.Round(v * float64(spec.Scale)))
 		}

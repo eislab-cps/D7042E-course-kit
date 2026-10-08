@@ -8,11 +8,14 @@ path, storage and a derived result.
 
 ```
 Wokwi Pico (C) ──UART──┐
-                       ├──▶ gateway (Go, SDK) ──▶ AH5 services ──▶ consumers
+                       ├◀─▶ gateway (Go, SDK) ◀─▶ AH5 services ◀─▶ consumers
 sim/sensor_sim (Go) ───┘          │
                                   ├──▶ MQTT (Mosquitto) ──▶ alert subscriber
                                   └──▶ collector ──▶ InfluxDB ──▶ analysis service
 ```
+
+The device link carries readings up and, for actuation (R8, grades 4 and 5), commands down
+over the same serial line, socket or a second pipe (`FRAME_FORMAT.md` section 7).
 
 ## Directory tree
 

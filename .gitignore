@@ -19,3 +19,7 @@ __pycache__/
 
 # Windows download metadata (alternate-data-stream leftovers)
 *:Zone.Identifier
+
+# Built Canvas packages: never committed (Canvas exports are ignored by a nested,
+# unpublished .gitignore)
+*.imscc

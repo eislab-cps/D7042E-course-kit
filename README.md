@@ -8,12 +8,17 @@ built on the Arrowhead 5.2 core systems from
 Everything runs on a laptop. Real Raspberry Pi hardware is optional and a drop-in
 replacement: the same gateway code reads from a simulator or from a serial port.
 
-**Status:** ready for the course. The kit pins the Arrowhead stack at **v0.1.3**
+**Status:** ready for the course. Kit **v0.1.5** adds actuation (requirement R8, needed for
+grades 4 and 5): downlink commands to the device (`FRAME_FORMAT.md` section 7), a simulated
+actuator in the simulator, and the actuator side of the gateway stub as TODOs. The course runs
+as four intense half-time weeks, a flexible period and an examination week
+(`assignment/ASSIGNMENT.md`). The kit pins the Arrowhead stack at **v0.1.3**
 (prebuilt images `ghcr.io/ulfbod/<name>:v0.1.3`, amd64 and arm64) and the SDK at **v0.1.0**
 (`go.mod`). The stack APIs are unchanged since v0.1.0; v0.1.2 made profile-ca keep its CA
 certificate and its certificate records, revocations included, across restarts, and v0.1.3
-corrects the stack's documentation about its bundled policy decision point. The kit contains the compose stack, a working
-sensor simulator, a gateway stub that already reads and checks device frames, and a Wokwi
+corrects the stack's documentation about its bundled policy decision point; stack and SDK are
+unchanged in kit v0.1.5. The kit contains the compose stack, a working
+sensor simulator with an optional actuator, a gateway stub that already reads and checks device frames, and a Wokwi
 skeleton. What you build is described in `assignment/ASSIGNMENT.md`.
 
 ## Layout
@@ -21,9 +26,12 @@ skeleton. What you build is described in `assignment/ASSIGNMENT.md`.
 ```
 deploy/           slim docker compose: 3 foundation systems, orchestrator (consumerauth
                   mode), profile-ca, cert-provisioner, Mosquitto, InfluxDB (pinned images)
-sim/sensor_sim/   Go program emitting Pico UART frames to a named pipe or TCP socket
-gateway/          Go stub for the RPi 4 role; SERIAL_SOURCE selects pipe, socket, /dev/ttyUSB0
-wokwi/pico_sensor Wokwi project: Pico + BMP180 + DHT22 + LED; C skeleton (I2C and UART init only)
+sim/sensor_sim/   Go program emitting Pico UART frames to a named pipe or TCP socket; optional
+                  actuator that reads downlink commands (R8)
+gateway/          Go stub for the RPi 4 role; SERIAL_SOURCE selects pipe, socket, /dev/ttyUSB0;
+                  the same link carries downlink commands (R8)
+wokwi/pico_sensor Wokwi project: Pico + BMP180 + DHT22 + LED; C skeleton (I2C and UART init,
+                  downlink polling; the LED is the R8 actuator)
 assignment/       ASSIGNMENT.md with requirements R1–R12; api-quick-reference.md
 FRAME_FORMAT.md   the UART frame contract shared by simulator, gateway and Wokwi code
 ```
@@ -72,7 +80,7 @@ go test ./...     # tier 2
 |---|---|
 | `assignment/ASSIGNMENT.md` | The assignment: brief, scenarios, requirements R1–R12, phases, submission, oral examination |
 | `assignment/api-quick-reference.md` | Endpoints, request shapes and `curl` examples for the kit's Arrowhead systems |
-| `FRAME_FORMAT.md` | Device frame contract between Pico/simulator and gateway |
+| `FRAME_FORMAT.md` | Device frame contract between Pico/simulator and gateway, both directions |
 | `deploy/README.md` | The compose stack: services, ports, settings, `.env` |
 | `sim/sensor_sim/README.md` | Simulator flags and scenarios |
 | `gateway/README.md` | Gateway stub: `SERIAL_SOURCE`, environment, what is already done |

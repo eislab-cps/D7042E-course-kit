@@ -1,7 +1,8 @@
-// Package frame implements the device frame contract in FRAME_FORMAT.md (version 1).
+// Package frame implements the device frame contract in FRAME_FORMAT.md (version 2).
 //
-// The simulator (sim/sensor_sim) encodes frames with it and the gateway parses them
-// with it, so both sides share one implementation of the contract. Section numbers in
+// The simulator (sim/sensor_sim) encodes uplink frames and decodes downlink frames with
+// it, and the gateway does the opposite, so both sides share one implementation of the
+// contract. Section numbers in
 // comments refer to FRAME_FORMAT.md.
 package frame
 
@@ -62,7 +63,13 @@ var (
 // Parse parses one line (with or without the trailing LF; a CR before the LF is
 // tolerated). It checks syntax only: key ranges, unknown keys, HMAC and sequence
 // rules are applied by Check, Verifier and Tracker.
-func Parse(line string) (Frame, error) {
+func Parse(line string) (Frame, error) { return parse(line, "S") }
+
+// ParseDownlink parses one downlink line (section 7): the same syntax with "C" as the
+// sequence field.
+func ParseDownlink(line string) (Frame, error) { return parse(line, "C") }
+
+func parse(line, seqKey string) (Frame, error) {
 	if len(line) > MaxLineLen {
 		return Frame{}, ErrTooLong
 	}
@@ -89,7 +96,7 @@ func Parse(line string) (Frame, error) {
 		}
 		switch {
 		case i == 0:
-			if k != "S" {
+			if k != seqKey {
 				return Frame{}, ErrNoSeq
 			}
 			n, err := parseDigits(v, 5)
@@ -97,7 +104,7 @@ func Parse(line string) (Frame, error) {
 				return Frame{}, ErrSyntax
 			}
 			f.Seq = uint16(n)
-		case k == "S":
+		case k == seqKey:
 			return Frame{}, ErrNoSeq
 		case k == "H":
 			if i != len(parts)-1 || !isLowerHex(v, 16) {
@@ -128,9 +135,14 @@ func Parse(line string) (Frame, error) {
 
 // Encode renders f as a wire line including the trailing LF. With a non-nil key it
 // appends the HMAC tag (section 5); f.Tag is ignored.
-func Encode(f Frame, key []byte) string {
+func Encode(f Frame, key []byte) string { return encode(f, key, "S:") }
+
+// EncodeDownlink renders a downlink frame (section 7), with "C" as the sequence field.
+func EncodeDownlink(f Frame, key []byte) string { return encode(f, key, "C:") }
+
+func encode(f Frame, key []byte, seqPrefix string) string {
 	var b strings.Builder
-	b.WriteString("S:")
+	b.WriteString(seqPrefix)
 	b.WriteString(strconv.Itoa(int(f.Seq)))
 	for _, fl := range f.Fields {
 		b.WriteByte(';')

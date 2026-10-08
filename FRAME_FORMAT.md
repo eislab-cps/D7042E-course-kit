@@ -1,18 +1,21 @@
-# FRAME_FORMAT.md — sensor frame contract
+# FRAME_FORMAT.md — sensor and actuator frame contract
 
-The one contract shared by the three device-side components of the kit:
+The one contract shared by the three device-side components of the kit. Uplink frames
+(sections 1–6) go from the device to the gateway; downlink frames (section 7) carry
+actuator commands from the gateway to the device:
 
 | Component | Role | Path |
 |---|---|---|
-| Wokwi C firmware | producer | `wokwi/pico_sensor/src/main.c` |
-| Sensor simulator | producer | `sim/sensor_sim/` |
-| Gateway | consumer | `gateway/` |
+| Wokwi C firmware | uplink producer, downlink consumer | `wokwi/pico_sensor/src/main.c` |
+| Sensor simulator | uplink producer, downlink consumer | `sim/sensor_sim/` |
+| Gateway | uplink consumer, downlink producer | `gateway/` |
 
 The gateway must not be able to tell simulator from hardware. Anything a producer emits
 that this document does not allow is a producer bug; anything the gateway rejects that
 this document allows is a gateway bug.
 
-**Version:** 1. A change to this file is a contract change: update it first, then the
+**Version:** 2 (adds the downlink, section 7, and the actuator keys `ACTS`, `ACK`, `SAFE`).
+A change to this file is a contract change: update it first, then the
 simulator, the Wokwi skeleton and the gateway parser in the same release.
 
 ---
@@ -68,6 +71,9 @@ response and states the unit in its interface contract.
 | `PRES` | Hydraulic pressure | bar | 100 | 0 … 40000 | Industrial press |
 | `CYC` | Press cycle count | cycles | 1 | 0 … 2147483647, monotonic, wraps to 0 | Industrial press |
 | `BOOT` | Restart marker | — | 1 | 1 … 65535 (boot epoch) | All, section 4 |
+| `ACTS` | Observed actuator state | per actuator | 1 | `cooling`, `valve`: 0 … 1 | With an actuator (R8), section 7 |
+| `ACK` | Last accepted downlink `CID`: the device has started acting on it; `ACTS` shows when the actuator has followed | — | 1 | 0 … 2147483647 (0 = none yet) | With an actuator, section 7 |
+| `SAFE` | Device is in its safe state | 0 or 1 | 1 | 0 … 1 | With an actuator, section 7 |
 
 Custom scenarios register their keys in the project proposal: same key syntax, integer
 scale stated, range stated. A custom key must not reuse a key above with another meaning.
@@ -176,3 +182,91 @@ Error cases:
 | `S:47;TEMP:2247;LUX:880` | accept TEMP; ignore unknown `LUX` |
 | `S:48;HUM:12000` | accept frame; drop `HUM` field as range error |
 | `S:52;TEMP:2250` after `S:48` | accept; 3 lost frames |
+
+## 7. Downlink: actuator commands (requirement R8)
+
+Downlink frames carry commands from the gateway to the device, over the same link as the
+uplink: the same UART or serial device (read and write), the same TCP connection, or, when
+the uplink is a named pipe, a second named pipe `<pipe>.down`. Transport and line framing
+are as in section 1: one 7-bit ASCII line, LF-terminated, at most 128 bytes.
+
+```
+dframe     = cseq-field *( ";" cmd-field ) [ ";" hmac-field ] LF
+cseq-field = "C:" 1*5DIGIT                       ; 0..65535, its own counter
+cmd-field  = key ":" value                       ; the key and value syntax of section 2
+hmac-field = "H:" 16LOWHEX                        ; as section 5
+```
+
+| Key | Meaning | Values |
+|---|---|---|
+| `C` | downlink sequence number, always first | 0 … 65535; rules as section 4 |
+| `BOOT` | first downlink after a gateway start | 1 … 65535 (gateway boot epoch) |
+| `CID` | command ID (idempotency) | 1 … 2147483647 |
+| `ACT` | commanded actuator state | `cooling`, `valve`: 0 … 1 |
+| `SAFE` | enter the safe state now | 1 |
+| `KA` | keep-alive: no command, the gateway is alive | 1 |
+
+A downlink frame is exactly one of these (`BOOT` may be added to any of them):
+
+| Kind | Frame | Device action |
+|---|---|---|
+| Command | `C:<n>;CID:<id>;ACT:<v>` | drive the actuator to `ACT` once for this `CID`; report `ACK` from the next frame, `ACTS` when the actuator has followed |
+| Safe | `C:<n>;CID:<id>;SAFE:1` | enter the safe state once for this `CID`, then report `SAFE:1` and `ACK` |
+| Keep-alive | `C:<n>;KA:1` | nothing, except that the link counts as alive |
+
+Device rules:
+
+- **Sequence:** as section 4, with `C` in place of `S`: in order or gap: accept; duplicate
+  or stale: drop and count; `BOOT`: accept and reset; first frame seen: accept any `C`.
+- **Idempotency:** the device keeps the last 8 applied `CID` values. A frame with one of
+  them is not applied again; `ACK` keeps reporting it.
+- **Validity:** a command or safe frame is dropped (and counted) if it has no `CID`, has both
+  `ACT` and `SAFE`, or has an `ACT` value outside the actuator's range. Unlike an uplink
+  range error, a bad command is never partly applied. Unknown keys are ignored.
+- **Link timeout:** if no valid downlink frame (command, safe or keep-alive) arrives for
+  `LINK_TIMEOUT` (default 10 s), the device enters its safe state by itself. The gateway
+  therefore sends a keep-alive at least every `LINK_TIMEOUT` / 3 when it has no command.
+- **Safe state:** the actuator's documented safe value (the simulator: `cooling` → 1, cooling
+  on, so the goods stay cold; `valve` → 0, closed) and `SAFE:1` in every uplink frame. The
+  device starts in its safe state (no gateway has spoken yet) and leaves it only on a new
+  command frame. Whether a command may follow
+  an emergency stop is the gateway's decision, not the device's.
+- **Feedback:** with an actuator, every uplink frame carries `ACTS`, `ACK` and `SAFE`.
+  `ACTS` is the observed state, which can lag behind `ACT` or differ from it (an actuator
+  that sticks).
+- **HMAC:** the same algorithm and **the same key** as section 5. The tag input runs from
+  `C:` up to and including the `;` before `H:`. Uplink input starts at `S:`, so a tag
+  cannot be replayed into the other direction. When the device tags its uplink, it requires
+  tagged downlink frames and drops untagged ones; otherwise it accepts untagged frames and
+  verifies a tag when present.
+
+Worked downlink:
+
+| Frame | Device verdict |
+|---|---|
+| `C:0;BOOT:211;KA:1` | accept; gateway restart, epoch 211 |
+| `C:12;CID:907;ACT:1` | accept; cooling on, `ACK:907` |
+| `C:12;CID:907;ACT:1` (again) | drop: stale sequence |
+| `C:13;CID:907;ACT:1` | accept; `CID` already applied, nothing done |
+| `C:14;CID:908;SAFE:1` | accept; safe state, `SAFE:1`, `ACK:908` |
+| `C:15;ACT:1` | drop: no `CID` |
+| `C:16;CID:909;ACT:1;SAFE:1` | drop: both `ACT` and `SAFE` |
+| `C:17;CID:910;ACT:5` | drop: `ACT` out of range |
+| `C:12;CID:907;ACT:1;H:354a9ceaa3cd5bba` | accept (tag correct) |
+| `C:12;CID:907;ACT:0;H:354a9ceaa3cd5bba` | drop: tag mismatch (`ACT` altered; correct tag would be `bd6a536697f3341b`) |
+
+The matching uplink after the command: `S:431;TEMP:412;HUM:6020;ACTS:1;ACK:907;SAFE:0`.
+
+Reproduce a downlink tag:
+
+```bash
+printf 'C:12;CID:907;ACT:1;' | openssl dgst -sha256 \
+  -mac HMAC -macopt hexkey:000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f \
+  | awk '{print substr($NF,1,16)}'
+# 354a9ceaa3cd5bba
+```
+
+**Known limitation:** without HMAC, anyone who can write to the link can command the
+actuator; with HMAC, an old authentic `BOOT` downlink can still be replayed to reset the
+device's sequence check. The gateway is the only party that may command the device: who
+may command the gateway, and in which order commands run, is the gateway's own logic (R8).
